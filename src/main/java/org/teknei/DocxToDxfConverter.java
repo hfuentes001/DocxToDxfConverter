@@ -25,6 +25,7 @@ public class DocxToDxfConverter {
         String prefix;
         boolean isParagraph;
         ParagraphAlignment alignment;
+        double indent;
 
         // Run normal
         RunData(String text, String font, int size,
@@ -38,13 +39,15 @@ public class DocxToDxfConverter {
             this.underline = underline;
             this.strikethrough = strikethrough;
             this.isParagraph = false;
+            this.indent = 0.0;
         }
 
         // Párrafo de lista
-        RunData(ParagraphAlignment alignment, String prefix) {
+        RunData(ParagraphAlignment alignment, String prefix, double indent) {
             this.isParagraph = true;
             this.alignment = alignment;
             this.prefix = prefix;
+            this.indent = indent;
         }
     }
 
@@ -72,7 +75,8 @@ public class DocxToDxfConverter {
                 else if (element instanceof XWPFParagraph) {
                     XWPFParagraph para = (XWPFParagraph) element;
                     String prefix = computeListPrefix(doc, para);
-                    buffer.add(new RunData(para.getAlignment(), prefix));
+                    double indent = getParagraphIndent(para);
+                    buffer.add(new RunData(para.getAlignment(), prefix, indent));
 
                     for (XWPFRun run : para.getRuns()) {
                         for (XWPFPicture pic : run.getEmbeddedPictures()) {
@@ -129,6 +133,14 @@ public class DocxToDxfConverter {
         }
     }
 
+    private static double getParagraphIndent(XWPFParagraph para) {
+        int ind = para.getIndentationLeft();
+        if (ind > 0) {
+            return ind / 20.0; // value is in twentieths of a point
+        }
+        return 0.0;
+    }
+
     private static void flushBuffer(List<RunData> buffer, Path outFile) throws Exception {
         try (OutputStream os = Files.newOutputStream(outFile)) {
             writeRunsDXF(buffer, os);
@@ -163,6 +175,8 @@ public class DocxToDxfConverter {
                         || rd.alignment == ParagraphAlignment.DISTRIBUTE) ? "justify"
                         : "left";
                 w.writeAttribute("text-align", align);
+                w.writeAttribute("margin-left",
+                        String.format("%.2fpt", rd.indent));
 
                 if (rd.prefix != null) {
                     w.writeStartElement("fo:inline");
@@ -313,6 +327,8 @@ public class DocxToDxfConverter {
                                 || pa == ParagraphAlignment.DISTRIBUTE) ? "justify"
                                 : "left";
                         w.writeAttribute("text-align", align);
+                        w.writeAttribute("margin-left",
+                                String.format("%.2fpt", getParagraphIndent(para)));
 
                         String prefix = computeListPrefix(null, para);
                         if (prefix != null) {
